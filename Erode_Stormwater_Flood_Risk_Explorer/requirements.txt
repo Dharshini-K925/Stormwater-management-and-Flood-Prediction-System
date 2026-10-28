@@ -1,0 +1,10 @@
+Flask>=3.0,<4.0
+gunicorn>=22.0,<24.0
+numpy>=1.26
+pandas>=2.1
+scikit-learn>=1.4
+scipy>=1.11
+Pillow>=10.0
+tifffile>=2024.2.12
+SQLAlchemy>=2.0,<3.0
+psycopg[binary]>=3.2,<4.0

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Erode Stormwater & Flood Risk Explorer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#15263b;--muted:#64748b;--line:#e4eaf1;--blue:#1463df;--low:#21a675;--mod:#f2a93b;--high:#dc4d58}
+*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:var(--ink);font-family:"DM Sans",sans-serif}
+header{background:#10243a;color:#fff;padding:18px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px}
+h1{font:800 20px Manrope,sans-serif;margin:0 0 4px}.sub{font-size:12px;color:#b7c7d9}
+.tag{border:1px solid #64809a;border-radius:20px;padding:7px 12px;font-size:11px;color:#d8e6f5;white-space:nowrap}
+main{max-width:1500px;margin:auto;padding:18px}
+.warn{background:#fff7e6;border:1px solid #f1d49b;color:#79531a;border-radius:12px;padding:10px 14px;font-size:12px;margin-bottom:16px}
+.layout{display:grid;grid-template-columns:340px minmax(0,1fr) 320px;gap:16px;align-items:start}
+.panel{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:16px}
+.ph{padding:13px 16px;border-bottom:1px solid var(--line);font:700 14px Manrope;display:flex;justify-content:space-between;align-items:center}
+.pb{padding:14px 16px}.small{font-size:11px;color:var(--muted);font-weight:400;font-family:"DM Sans"}
+label.f{display:block;font-size:12px;font-weight:600;margin:10px 0 4px}
+input[type=number]{width:100%;padding:9px 10px;border:1px solid #cfd9e5;border-radius:8px;font:500 14px "DM Sans"}
+input:focus{outline:2px solid #bcd3fb;border-color:var(--blue)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{border:0;border-radius:9px;background:var(--blue);color:#fff;padding:11px 13px;font:600 13px "DM Sans";cursor:pointer;width:100%;margin-top:12px}
+.btn.sec{background:#edf4ff;color:#1454ad;border:1px solid #d3e3ff}.btn:disabled{opacity:.6;cursor:wait}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.chip{border:1px solid #d3e3ff;background:#f4f8ff;color:#1454ad;border-radius:16px;padding:4px 10px;font-size:11px;cursor:pointer}
+#map{height:640px;background:#eaf0f4}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:10px 14px;border-top:1px solid var(--line);font-size:11px;color:#506176}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.err{color:#b42335;font-size:12px;margin-top:8px}
+.result{display:none}.big{font:800 34px Manrope}.badge{display:inline-block;border-radius:20px;padding:5px 12px;font-weight:700;font-size:12px;color:#fff}
+.bar{height:10px;border-radius:6px;background:linear-gradient(90deg,var(--low),var(--mod),var(--high));position:relative;margin:12px 0 4px}
+.bar i{position:absolute;top:-4px;width:4px;height:18px;background:#10243a;border-radius:2px;transform:translateX(-2px)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.cell{background:#f5f8fc;border-radius:8px;padding:8px 10px}.cell span{display:block;font-size:10px;color:var(--muted)}.cell b{font-size:13px}
+.note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:10px}.alert{background:#fdecee;border:1px solid #f3b7bf;color:#8a1f2c;border-radius:8px;padding:8px 10px;font-size:11px;margin-top:10px}
+.layer{display:flex;gap:8px;font-size:12px;margin:8px 0;align-items:flex-start}
+table{width:100%;border-collapse:collapse;font-size:11px}td,th{padding:6px 4px;border-bottom:1px solid var(--line);text-align:left}
+.imp{font-size:11px;margin:6px 0}.imp div{background:#eaf2ff;border-radius:4px;height:6px;margin-top:3px}.imp div i{display:block;height:6px;background:var(--blue);border-radius:4px}
+.empty{color:var(--muted);font-size:12px;line-height:1.6}
+@media(max-width:1150px){.layout{grid-template-columns:1fr}#map{height:480px}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Erode Stormwater & Flood Risk System</h1><div class="sub">QGIS terrain & drainage layers + Random Forest prediction · Periyar Nagar–Stony Bridge</div></div>
+  <div class="tag">INTEGRATED PROJECT</div>
+</header>
+<main>
+<div class="warn"><strong>Prototype notice:</strong> the model is trained on a <b>synthetic</b> dataset. Predictions appear only after you enter rainfall and a location, and are for demonstration, not an official flood warning.</div>
+<div class="layout">
+
+<!-- LEFT: input -->
+<div>
+  <div class="panel">
+    <div class="ph">Rainfall & location input <span class="small">manual / gauge</span></div>
+    <div class="pb">
+      <label class="f">Rainfall – last 1 hour (mm) *</label>
+      <input type="number" id="r1" min="0" step="0.1" placeholder="e.g. 35">
+      <div class="chips" id="presets">
+        <span class="chip" data-v="5">Light 5</span><span class="chip" data-v="20">Moderate 20</span>
+        <span class="chip" data-v="40">Heavy 40</span><span class="chip" data-v="70">Extreme 70</span>
+      </div>
+      <div class="row">
+        <div><label class="f">Last 24 h (mm)</label><input type="number" id="r24" min="0" step="0.1" placeholder="optional"></div>
+        <div><label class="f">Previous 3 days (mm)</label><input type="number" id="ant" min="0" step="0.1" placeholder="optional"></div>
+      </div>
+      <div class="small" style="margin-top:6px">If left blank: 24 h = 1 h value, previous 3 days = 0.</div>
+      <div class="row">
+        <div><label class="f">Latitude *</label><input type="number" id="lat" step="0.000001" placeholder="11.3328"></div>
+        <div><label class="f">Longitude *</label><input type="number" id="lon" step="0.000001" placeholder="77.7245"></div>
+      </div>
+      <div class="small" style="margin-top:6px">Tip: click anywhere on the map to fill latitude/longitude.</div>
+      <button class="btn" id="predictBtn">Predict flood risk at this point</button>
+      <button class="btn sec" id="simBtn">Simulate this rainfall over the whole area</button>
+      <button class="btn sec" id="clearBtn">Clear predictions</button>
+      <div class="err" id="err"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ph">Model <span class="small" id="acc"></span></div>
+    <div class="pb"><div class="small" style="margin-bottom:6px">Most influential inputs (Random Forest)</div><div id="imp"></div></div>
+  </div>
+</div>
+
+<!-- CENTER: map -->
+<div>
+  <div class="panel">
+    <div class="ph">Study-area map (30 m cells) <span class="small" id="simInfo">No prediction yet</span></div>
+    <div id="map"></div>
+    <div class="legend"><span><i class="dot" style="background:var(--low)"></i>Low (&lt;35%)</span><span><i class="dot" style="background:var(--mod)"></i>Moderate (35–65%)</span><span><i class="dot" style="background:var(--high)"></i>High (&gt;65%)</span><span>Basemap: OpenStreetMap</span></div>
+  </div>
+</div>
+
+<!-- RIGHT: result + layers -->
+<div>
+  <div class="panel">
+    <div class="ph">Prediction result</div>
+    <div class="pb">
+      <div class="empty" id="noRes">Enter rainfall and a location, then press <b>Predict</b>. Nothing is predicted until you do.</div>
+      <div class="result" id="res">
+        <div style="display:flex;justify-content:space-between;align-items:center"><div class="big" id="pProb"></div><span class="badge" id="pBadge"></span></div>
+        <div class="small">Estimated flood probability</div>
+        <div class="bar"><i id="pMark"></i></div>
+        <div id="pAlert"></div>
+        <div class="grid" id="pGrid"></div>
+        <div class="note" id="pNote"></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ph">Map layers</div>
+    <div class="pb">
+      <div id="layerList"><div class="small">Loading QGIS layers…</div></div>
+      <div class="small" style="margin:10px 0 2px;font-weight:600;color:#334155">QGIS raster layers</div>
+      <div id="rasterList"></div>
+      <label class="f">Add another QGIS GeoJSON</label>
+      <input type="file" id="geoFiles" accept=".geojson,.json" multiple style="font-size:11px;max-width:100%">
+      <div class="small" id="upStatus" style="margin-top:6px"></div>
+    </div>
+  </div>
+  <div class="panel">
+    <div class="ph">Prediction log <span class="small" id="dbInfo">Checking database…</span></div>
+    <div class="pb"><div class="empty" id="logEmpty">No predictions yet.</div>
+      <table id="logT" style="display:none"><thead><tr><th>#</th><th>1h mm</th><th>Lat, Lon</th><th>Risk</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</div>
+</div>
+<div style="text-align:center;font-size:11px;color:#718096;padding:12px">GIS-based Stormwater Management and Flood Prediction · Erode, Tamil Nadu · Academic prototype</div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const COL={Low:'#21a675',Moderate:'#f2a93b',High:'#dc4d58'};
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const riskOf=p=>p<35?'Low':(p<65?'Moderate':'High');
+const map=L.map('map',{preferCanvas:true}).setView([11.3328,77.7245],14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const simLayer=L.layerGroup().addTo(map), predLayer=L.layerGroup().addTo(map), sampleLayer=L.layerGroup();
+let pickMarker=null, count=0, CELL=[0.0002,0.0002];
+
+fetch('/api/info').then(r=>r.json()).then(i=>{
+  $('acc').textContent='Synthetic test accuracy '+i.demo_accuracy+'%';
+  if(i.database) $('dbInfo').textContent=i.database.engine+' · '+i.database.predictions+' saved predictions';
+  const mx=Math.max(...i.importance.map(x=>x.value));
+  $('imp').innerHTML=i.importance.map(x=>`<div class="imp">${esc(x.feature.replace(/_/g,' '))} · ${x.value}%<div><i style="width:${x.value/mx*100}%"></i></div></div>`).join('');
+  map.fitBounds(i.bounds,{padding:[20,20]}); window.BOUNDS=i.bounds; CELL=i.cell;
+  L.rectangle(i.bounds,{color:'#10243a',weight:1,dashArray:'5 5',fill:false,interactive:false}).addTo(map);
+  i.rasters.forEach(r=>{
+    const ov=L.imageOverlay('/api/raster/'+r.id+'.png',i.bounds,{opacity:.75});
+    const row=document.createElement('label');row.className='layer';
+    row.innerHTML=`<input type="checkbox"><span>${esc(r.label)}</span>`;
+    row.querySelector('input').onchange=e=>{if(e.target.checked){map.addLayer(ov);ov.bringToBack();}else map.removeLayer(ov);};
+    $('rasterList').appendChild(row);
+  });
+  if(!$('lat').value){/* leave empty: user chooses */}
+});
+
+/* ---- QGIS layers ---- */
+function styleFor(n){n=n.toLowerCase();
+  if(n.includes('priority')||n.includes('low_elev'))return{color:'#d9485f',weight:2,fillColor:'#ef6a7b',fillOpacity:.3};
+  if(n.includes('drain')||n.includes('flow'))return{color:'#087f8c',weight:2,fillColor:'#22b8c7',fillOpacity:.25};
+  if(n.includes('road'))return{color:'#7c5c39',weight:2,fillOpacity:.1};
+  return{color:'#2367c9',weight:2,fillColor:'#4f91e8',fillOpacity:.22};}
+function addLayer(name,gj){
+  const st=styleFor(name);
+  const lyr=L.geoJSON(gj,{style:()=>st,pointToLayer:(f,ll)=>L.circleMarker(ll,{radius:5,color:st.color,fillColor:st.fillColor,fillOpacity:.8}),
+    onEachFeature:(f,l)=>{const rows=Object.entries(f.properties||{}).slice(0,8).map(([k,v])=>`<div><b>${esc(k)}:</b> ${esc(v)}</div>`).join('');
+      l.bindPopup(`<strong>${esc(name)}</strong><br>${rows||'No attributes'}`);}}).addTo(map);
+  lyr.bringToBack();
+  const row=document.createElement('label');row.className='layer';
+  row.innerHTML=`<input type="checkbox" checked><span><b style="color:${st.color}">■</b> ${esc(name)}</span>`;
+  row.querySelector('input').onchange=e=>e.target.checked?map.addLayer(lyr):map.removeLayer(lyr);
+  $('layerList').appendChild(row);
+}
+fetch('/api/layers').then(r=>r.json()).then(async names=>{
+  $('layerList').innerHTML='';
+  if(!names.length){$('layerList').innerHTML='<div class="small">No GeoJSON in data/geojson yet – use the upload below.</div>';return;}
+  for(const n of names){try{addLayer(n,await (await fetch('/geojson/'+encodeURIComponent(n))).json());}catch(e){}}
+});
+$('geoFiles').addEventListener('change',async e=>{
+  let ok=0,bad=[];
+  for(const f of e.target.files){try{const g=JSON.parse(await f.text());if(!g.type)throw Error('not GeoJSON');addLayer(f.name,g);ok++;}catch(x){bad.push(f.name)}}
+  $('upStatus').textContent=ok+' layer(s) added'+(bad.length?'; failed: '+bad.join(', '):'');e.target.value='';
+});
+/* ---- input helpers ---- */
+document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>$('r1').value=c.dataset.v);
+map.on('click',e=>{
+  $('lat').value=e.latlng.lat.toFixed(6);$('lon').value=e.latlng.lng.toFixed(6);
+  if(pickMarker)map.removeLayer(pickMarker);
+  pickMarker=L.marker(e.latlng).addTo(map).bindTooltip('Selected location');
+});
+function body(){return{rainfall_1h:$('r1').value,rainfall_24h:$('r24').value,antecedent_3d:$('ant').value,latitude:$('lat').value,longitude:$('lon').value};}
+async function post(url,b){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j;}
+
+/* ---- single-point prediction ---- */
+$('predictBtn').onclick=async()=>{
+  $('err').textContent='';
+  if($('r1').value===''||$('lat').value===''||$('lon').value===''){$('err').textContent='Enter 1-hour rainfall, latitude and longitude (or click the map).';return;}
+  $('predictBtn').disabled=true;
+  try{
+    const r=await post('/api/predict',body());
+    show(r);
+  }catch(e){$('err').textContent=e.message;}
+  $('predictBtn').disabled=false;
+};
+function show(r){
+  const c=COL[r.risk];count++;
+  $('noRes').style.display='none';$('res').style.display='block';
+  $('pProb').textContent=r.probability+'%';$('pBadge').textContent=r.risk+' risk';$('pBadge').style.background=c;
+  $('pMark').style.left=Math.min(r.probability,100)+'%';
+  $('pAlert').innerHTML=r.outside_area?`<div class="alert">This location is outside the QGIS study area (dashed outline), so terrain values are copied from the nearest edge cell and are unreliable.</div>`:'';
+  const g=r.gis,y=r.synthetic,i=r.inputs;
+  const cells=[['Rain 1h (input)',i.rainfall_1h+' mm'],['Rain 24h (input)',i.rainfall_24h+' mm'],['Previous 3 days (input)',i.antecedent_3d+' mm'],
+    ['Slope · QGIS',g.slope+'°'],['Flow accumulation · QGIS',g.flow_accumulation],['Distance to drainage · QGIS',g.distance_to_drainage+' m'],
+    ['Drainage candidate · QGIS',g.drainage_candidate?'Yes':'No'],['Low-elevation zone · QGIS',g.low_elevation?'Yes':'No'],['Priority area · QGIS',g.priority_area?'Yes':'No'],
+    ['Elevation · synthetic',y.elevation+' m'],['Impervious · synthetic',y.impervious+'%'],['Soil infiltration · synthetic',y.infiltration+' mm/h']];
+  $('pGrid').innerHTML=cells.map(([a,b])=>`<div class="cell"><span>${a}</span><b>${esc(b)}</b></div>`).join('');
+  $('pNote').textContent='Slope, flow accumulation, drainage and low-elevation values come from the civil team\'s QGIS layers at this point. Elevation, impervious surface and soil are still synthetic. '+r.status+'.';
+  L.circle([r.latitude,r.longitude],{radius:60,color:c,weight:2,fillColor:c,fillOpacity:.25,interactive:false}).addTo(predLayer);
+  L.circleMarker([r.latitude,r.longitude],{radius:9,color:'#fff',weight:2,fillColor:c,fillOpacity:1}).addTo(predLayer)
+    .bindPopup(`<b>Prediction #${count}</b><br>${r.risk} risk – ${r.probability}%<br>Rain 1h: ${i.rainfall_1h} mm<br>${r.latitude.toFixed(5)}, ${r.longitude.toFixed(5)}`).openPopup();
+  map.panTo([r.latitude,r.longitude]);
+  loadPredictionHistory();
+}
+
+/* ---- saved database history ---- */
+async function loadPredictionHistory(){
+  try{
+    const res=await fetch('/api/history?limit=20');
+    if(!res.ok)throw Error('Could not load saved history');
+    const rows=await res.json();
+    const tbody=$('logT').tBodies[0];tbody.innerHTML='';
+    if(!rows.length){$('logT').style.display='none';$('logEmpty').style.display='block';$('logEmpty').textContent='No saved predictions yet.';return;}
+    $('logEmpty').style.display='none';$('logT').style.display='table';
+    rows.forEach(x=>{
+      const c=COL[x.risk]||'#64748b';
+      const stamp=x.predicted_at?new Date(x.predicted_at).toLocaleString():'—';
+      tbody.insertAdjacentHTML('beforeend',`<tr><td title="${esc(stamp)}">${x.id}</td><td>${x.rainfall_1h}</td><td>${Number(x.latitude).toFixed(4)}, ${Number(x.longitude).toFixed(4)}</td><td style="color:${c};font-weight:700">${esc(x.risk)} ${x.probability}%</td></tr>`);
+    });
+    fetch('/api/info').then(r=>r.json()).then(i=>{if(i.database)$('dbInfo').textContent=i.database.engine+' · '+i.database.predictions+' saved predictions';}).catch(()=>{});
+  }catch(e){$('logEmpty').textContent='Prediction history could not be loaded from the database.';$('dbInfo').textContent='Database unavailable';}
+}
+loadPredictionHistory();
+
+/* ---- area simulation ---- */
+$('simBtn').onclick=async()=>{
+  $('err').textContent='';
+  if($('r1').value===''){$('err').textContent='Enter 1-hour rainfall first.';return;}
+  $('simBtn').disabled=true;
+  try{
+    const r=await post('/api/simulate',body());
+    simLayer.clearLayers();
+    const hl=CELL[0]/2,hw=CELL[1]/2;
+    r.cells.forEach(p=>L.rectangle([[p[0]-hl,p[1]-hw],[p[0]+hl,p[1]+hw]],{weight:0,fillColor:COL[riskOf(p[2])],fillOpacity:.6})
+      .bindPopup(`${riskOf(p[2])} risk – ${p[2]}%${p[3]?'<br>Inside QGIS priority area':''}`).addTo(simLayer));
+    const c=r.counts;$('simInfo').textContent=`Scenario ${r.inputs.rainfall_1h} mm/h → cells: High ${c.High} · Moderate ${c.Moderate} · Low ${c.Low}`;
+    if(window.BOUNDS)map.fitBounds(window.BOUNDS,{padding:[20,20]});
+  }catch(e){$('err').textContent=e.message;}
+  $('simBtn').disabled=false;
+};
+$('clearBtn').onclick=()=>{simLayer.clearLayers();predLayer.clearLayers();if(pickMarker)map.removeLayer(pickMarker);pickMarker=null;
+  $('simInfo').textContent='No prediction yet';$('res').style.display='none';$('noRes').style.display='block';
+  $('logT').tBodies[0].innerHTML='';$('logT').style.display='none';$('logEmpty').style.display='block';count=0;$('err').textContent='';};
+</script>
+</body>
+</html>
